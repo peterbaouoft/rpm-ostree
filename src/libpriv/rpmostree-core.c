@@ -50,6 +50,9 @@
 struct _RpmOstreeTreespec {
   GObject parent;
 
+  char *basedir_buf;
+  const char *basedir;
+
   GVariant *spec;
   GVariantDict *dict;
 };
@@ -63,6 +66,7 @@ rpmostree_treespec_finalize (GObject *object)
 
   g_clear_pointer (&self->spec, g_variant_unref);
   g_clear_pointer (&self->dict, g_variant_dict_unref);
+  g_clear_pointer (&self->basedir_buf, g_free);
 
   G_OBJECT_CLASS (rpmostree_treespec_parent_class)->finalize (object);
 }
@@ -186,6 +190,11 @@ rpmostree_treespec_new_from_keyfile (GKeyFile   *keyfile,
     g_variant_builder_add (&builder, "{sv}", "documentation", g_variant_new_boolean (documentation));
   }
 
+  { g_autofree char *postprocess = g_key_file_get_string (keyfile, "tree", "postprocess", NULL);
+    if (postprocess)
+      g_variant_builder_add (&builder, "{sv}", "postprocess", g_variant_new_string (postprocess));
+  }
+
   ret->spec = g_variant_builder_end (&builder);
   ret->dict = g_variant_dict_new (ret->spec);
 
@@ -195,10 +204,17 @@ rpmostree_treespec_new_from_keyfile (GKeyFile   *keyfile,
 RpmOstreeTreespec *
 rpmostree_treespec_new_from_path (const char *path, GError  **error)
 {
+  RpmOstreeTreespec *ret;
   g_autoptr(GKeyFile) specdata = g_key_file_new();
+
   if (!g_key_file_load_from_file (specdata, path, 0, error))
     return NULL;
-  return rpmostree_treespec_new_from_keyfile (specdata, error);
+
+  ret = rpmostree_treespec_new_from_keyfile (specdata, error);
+  /* dirname() may modify the pointer, so we need separate pointers */
+  ret->basedir_buf = g_strdup (path);
+  ret->basedir = dirname (ret->basedir_buf);
+  return ret;
 }
 
 RpmOstreeTreespec *
@@ -2142,6 +2158,7 @@ rpmostree_context_assemble_commit (RpmOstreeContext      *self,
     goto out;
 
   { const char *flavor = NULL;
+    const char *postprocess_script = NULL;
 
     g_variant_dict_lookup (self->spec->dict, "flavor", "&s", &flavor);
 
@@ -2157,6 +2174,31 @@ rpmostree_context_assemble_commit (RpmOstreeContext      *self,
         g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
                      "Unknown flavor '%s'", flavor);
         goto out;
+      }
+
+    g_variant_dict_lookup (self->spec->dict, "postprocess", "&s", &postprocess_script);
+
+    if (postprocess_script)
+      {
+        g_autofree char *script_path = NULL;
+        g_autofree char *script_contents = NULL;
+        
+        if (!self->spec->basedir)
+          {
+            g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                                 "No basedir known for spec");
+            goto out;
+          }
+        script_path = g_build_filename (self->spec->basedir, postprocess_script, NULL);
+        script_contents = glnx_file_get_contents_utf8_at (AT_FDCWD, script_path, NULL,
+                                                          cancellable, error);
+        if (!script_contents)
+          goto out;
+        rpmostree_output_task_begin ("Running %s...", postprocess_script);
+        if (!rpmostree_run_script_container (tmprootfs_dfd, postprocess_script, script_contents,
+                                             NULL, cancellable, error))
+          goto out;
+        rpmostree_output_task_end ("done");
       }
   }
 

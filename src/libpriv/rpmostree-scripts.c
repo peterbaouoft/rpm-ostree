@@ -179,13 +179,13 @@ rpmostree_script_txn_validate (HifPackage    *package,
   return ret;
 }
 
-static gboolean
-run_script_in_bwrap_container (int rootfs_fd,
-                               const char *name,
-                               const char *scriptdesc,
-                               const char *script,
-                               GCancellable  *cancellable,
-                               GError       **error)
+gboolean
+rpmostree_run_script_container (int rootfs_fd,
+                                const char *pkg_script,
+                                const char *script,
+                                const char *const *script_argv,
+                                GCancellable  *cancellable,
+                                GError       **error)
 {
   gboolean ret = FALSE;
   int i;
@@ -193,7 +193,6 @@ run_script_in_bwrap_container (int rootfs_fd,
   int estatus;
   char *rofiles_mnt = strdupa ("/tmp/rofiles-fuse.XXXXXX");
   const char *rofiles_argv[] = { "rofiles-fuse", "./usr", rofiles_mnt, NULL};
-  const char *pkg_script = glnx_strjoina (name, ".", scriptdesc+1);
   const char *postscript_name = glnx_strjoina ("/", pkg_script);
   const char *postscript_path_container = glnx_strjoina ("/usr/", postscript_name);
   const char *postscript_path_host;
@@ -309,6 +308,9 @@ run_script_in_bwrap_container (int rootfs_fd,
     else
       g_ptr_array_add (bwrap_argv, (char*)postscript_path_container);
   }
+  for (const char *const *iter = script_argv; script_argv && *script_argv; script_argv++)
+    g_ptr_array_add (bwrap_argv, (char*)*iter);
+    
   g_ptr_array_add (bwrap_argv, NULL);
 
   if (!g_spawn_sync (NULL, (char**)bwrap_argv->pdata, NULL, bwrap_spawnflags,
@@ -346,6 +348,8 @@ rpmostree_posttrans_run_sync (HifPackage    *pkg,
                               GCancellable  *cancellable,
                               GError       **error)
 {
+  const char *pkgname = hif_package_get_name (pkg);
+
   for (guint i = 0; i < G_N_ELEMENTS (posttrans_scripts); i++)
     {
       const char *desc = posttrans_scripts[i].desc;
@@ -366,11 +370,12 @@ rpmostree_posttrans_run_sync (HifPackage    *pkg,
         {
         case RPMOSTREE_SCRIPT_ACTION_DEFAULT:
           {
-            rpmostree_output_task_begin ("Running %s for %s...", desc, hif_package_get_name (pkg));
-            if (!run_script_in_bwrap_container (rootfs_fd, hif_package_get_name (pkg), desc, script,
-                                                cancellable, error))
+            g_autofree char *pkgscriptdesc = g_strconcat (pkgname, ".", desc+1, NULL);
+            rpmostree_output_task_begin ("Running %s for %s...", desc, pkgname);
+            if (!rpmostree_run_script_container (rootfs_fd, pkgscriptdesc, script, NULL,
+                                                 cancellable, error))
               {
-                g_prefix_error (error, "Running %s for %s: ", desc, hif_package_get_name (pkg));
+                g_prefix_error (error, "Running %s for %s: ", desc, pkgname);
                 return FALSE;
               }
             rpmostree_output_task_end ("done");
