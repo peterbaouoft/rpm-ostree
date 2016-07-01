@@ -154,6 +154,11 @@ rpmostree_treespec_new_from_keyfile (GKeyFile   *keyfile,
       g_variant_builder_add (&builder, "{sv}", "ref", g_variant_new_string (ref));
   }
 
+  { g_autofree char *flavor = g_key_file_get_string (keyfile, "tree", "flavor", NULL);
+    if (flavor)
+      g_variant_builder_add (&builder, "{sv}", "flavor", g_variant_new_string (flavor));
+  }
+
   if (!add_canonicalized_string_array (&builder, "packages", NULL, keyfile, error))
     return NULL;
 
@@ -2135,6 +2140,25 @@ rpmostree_context_assemble_commit (RpmOstreeContext      *self,
 
   if (!rpmostree_rootfs_postprocess_common (tmprootfs_dfd, cancellable, error))
     goto out;
+
+  { const char *flavor = NULL;
+
+    g_variant_dict_lookup (self->spec->dict, "flavor", "&s", &flavor);
+
+    if (flavor == NULL)
+      ;
+    else if (g_strcmp0 (flavor, "docker") == 0)
+      {
+        if (!rpmostree_rootfs_postprocess_docker (tmprootfs_dfd, cancellable, error))
+          goto out;
+      }
+    else
+      {
+        g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                     "Unknown flavor '%s'", flavor);
+        goto out;
+      }
+  }
 
   rpmostree_output_task_begin ("Writing OSTree commit");
 
