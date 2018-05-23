@@ -93,6 +93,8 @@ struct conv_passwd_ent {
   char *name;
   uid_t uid;
   gid_t gid;
+  char *pw_gecos;   /* user information */
+  char *pw_dir;     /* home directory */
 };
 
 struct conv_group_ent {
