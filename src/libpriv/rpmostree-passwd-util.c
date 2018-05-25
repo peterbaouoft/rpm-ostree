@@ -216,6 +216,42 @@ compare_group_ents (gconstpointer a, gconstpointer b)
   return strcmp ((*sa)->name, (*sb)->name);
 }
 
+gboolean
+rpmostree_passwdents2sysusers (GPtrArray  *passwd_ents,
+                               GHashTable *sysusers_table,
+                               GError     **error)
+{
+
+  for (int counter=0; counter < passwd_ents->len; counter++)
+    {
+      struct conv_passwd_ent *convent = passwd_ents->pdata[counter]
+
+      struct sysuser_ent *sysent = g_hash_table_lookup (sysusers_table, convent->name)
+      // handles collision in a different commit, for now let's keep things simpler
+      if (!sysent)
+        sysent = g_new (struct sysuser_ent, 1)
+      
+      // Note, sysuser support uid:gid format when uid is not equal
+      // to gid, and that allows sysusers to add both group and user entries
+      if (convent->uid != convent->gid)
+        sysent->id = g_strdup_printf ("%zu:%zu", convent->uid, convent->gid);
+      else
+        sysent->id = g_strdup_printf ("%zu", convent->uid)
+      
+      sysent->type = g_strdup ('u');
+      sysent->name =  g_strdup (convent->name);
+      // Apparently those two fields were not used other places,
+      // let's steal the poitner 
+      sysent->gecos = g_steal_pointer (&convent->pw_gecos);
+      sysent->dir = g_steal_pointer (&convent->pw_dir);
+      
+      // Not sure if we need the sysent name for now...
+      // so, suggestions are welcome =) 
+      char *name = g_strdup (sysent->name);
+      g_hash_table_insert (sysusers_table, name, sysent)  
+    }
+  
+}
 /* See "man 5 passwd" We just make sure the name and uid/gid match,
    and that none are missing. don't care about GECOS/dir/shell.
 */

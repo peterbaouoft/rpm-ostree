@@ -89,6 +89,14 @@ gboolean
 rpmostree_passwd_complete_rpm_layering (int       rootfs_dfd,
                                         GError  **error);
 
+struct sysuser_ent {
+  char *type;       /* type of sysuser entry, can be 1: u (user) 2: g (group) 3: m (mixed) 4: r (ranged ids) */
+  char *name;
+  char *id;         /* id in sysuser entry, can be in the form of 1: uid 2:gid 3: uid:gid */
+  char *gecos;      /* user information */
+  char *dir;        /* home directory */
+} 
+
 struct conv_passwd_ent {
   char *name;
   uid_t uid;
