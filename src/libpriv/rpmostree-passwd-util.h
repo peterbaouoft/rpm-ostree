@@ -95,7 +95,7 @@ struct sysuser_ent {
   char *id;         /* id in sysuser entry, can be in the form of 1: uid 2:gid 3: uid:gid */
   char *gecos;      /* user information */
   char *dir;        /* home directory */
-} 
+};
 
 struct conv_passwd_ent {
   char *name;
@@ -115,3 +115,8 @@ rpmostree_passwd_data2passwdents (const char *data);
 
 GPtrArray *
 rpmostree_passwd_data2groupents (const char *data);
+
+gboolean
+rpmostree_passwdents2sysusers (GPtrArray *passwd_ents,
+                               GHashTable **out_sysusers_table,
+                               GError **error);
