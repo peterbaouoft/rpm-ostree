@@ -20,6 +20,22 @@ static const gchar *expected_sysuser_passwd_content[] ={
   NULL
 };
 
+static const gchar *test_group[] = {
+  "chrony:x:992:",
+  "tcpdump:x:72:",
+  "systemd-timesync:x:991:",
+  "cockpit-ws:x:987:",
+  NULL
+};
+
+static const gchar *expected_sysuser_group_content[] = {
+  "g chrony 992 - -",
+  "g tcpdump 72 - -",
+  "g systemd-timesync 991 - -",
+  "g cockpit-ws 987 - -",
+  NULL
+};
+
 /* Create a variant for mapping name --> sysuser string content */
 static GVariantDict
 get_sysuser_content_variant (const char **content)
@@ -69,6 +85,26 @@ test_passwd_conversion(void)
 
 }
 
+static void
+test_group_conversion(void)
+{
+  gboolean ret;
+  g_autoptr(GHashTable) sysusers_table = NULL;
+  g_autoptr(GError) error = NULL;
+
+  /* Check if the conversion itself is valid */
+  g_autofree char *test_content = g_strjoinv ("\n", (char **)test_group);
+  g_autoptr(GPtrArray) group_ents = rpmostree_passwd_data2groupents (test_content);
+  ret = rpmostree_groupents2sysusers (group_ents, &sysusers_table, &error);
+  g_assert (ret);
+  g_assert_no_error (error);
+
+  /* Check validity of hashtable */
+  g_assert (sysusers_table);
+  g_assert_cmpuint (4, ==, g_hash_table_size (sysusers_table));
+
+}
+
 int
 main (int argc,
       char *argv[])
@@ -76,6 +112,7 @@ main (int argc,
   g_test_init (&argc, &argv, NULL);
 
   g_test_add_func ("/sysusers/passwd_conversion", test_passwd_conversion);
+  g_test_add_func ("/sysusers/group_conversion", test_group_conversion);
   return g_test_run ();
 }
 
