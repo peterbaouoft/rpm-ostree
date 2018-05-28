@@ -275,6 +275,43 @@ rpmostree_passwdents2sysusers (GPtrArray  *passwd_ents,
   return TRUE;
 }
 
+gboolean
+rpmostree_groupents2sysusers (GPtrArray  *group_ents,
+                              GHashTable **out_sysusers_table,
+                              GError     **error)
+{
+  /* Do the assignment inside the function so we don't need to handle visibility
+   * issues from different files any more */
+  GHashTable *sysusers_table = NULL;
+  sysusers_table = *out_sysusers_table ?: g_hash_table_new_full (g_str_hash, g_str_equal,
+                                                                 g_free, sysuser_ent_free);
+
+  for (int counter=0; counter < group_ents->len; counter++ )
+    {
+      struct conv_group_ent *convent = group_ents->pdata[counter];
+      struct sysuser_ent *sysent = g_hash_table_lookup (sysusers_table, convent->name);
+
+      if (!sysent)
+        sysent = g_new (struct sysuser_ent, 1);
+
+      /* Let's not handle collision right now, and leave to a latter commit */
+      sysent->id = g_strdup_printf ("%u", convent->gid);
+      sysent->type = g_strdup("g");
+      sysent->name = g_strdup (convent->name);
+      /* Unset the gecos & dir for g entries */
+      sysent->gecos = g_strdup ("-");
+      sysent->dir = g_strdup ("-");
+      char *name = g_strdup (sysent->name);
+      g_hash_table_insert (sysusers_table, name, sysent);
+    }
+
+  /* Do the assignment at the end if the sysusers_table was not initialized */
+  if (*out_sysusers_table == NULL)
+    *out_sysusers_table = g_steal_pointer (&sysusers_table);
+
+  return TRUE;
+}
+
 /* See "man 5 passwd" We just make sure the name and uid/gid match,
    and that none are missing. don't care about GECOS/dir/shell.
 */
