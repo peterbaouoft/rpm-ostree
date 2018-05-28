@@ -243,7 +243,6 @@ rpmostree_passwdents2sysusers (GPtrArray  *passwd_ents,
       struct conv_passwd_ent *convent = passwd_ents->pdata[counter];
       struct sysuser_ent *sysent = g_hash_table_lookup (sysusers_table, convent->name);
 
-      // handles collision in a different commit, for now let's keep things simpler
       if (!sysent)
         sysent = g_new (struct sysuser_ent, 1);
 
@@ -264,7 +263,7 @@ rpmostree_passwdents2sysusers (GPtrArray  *passwd_ents,
 
       // Not sure if we need the sysent name for now...
       // so, suggestions are welcome =)
-      char *name = g_strdup (sysent->name);
+      char *name = g_strdup (convent->name);
       g_hash_table_insert (sysusers_table, name, sysent);
     }
 
@@ -286,22 +285,53 @@ rpmostree_groupents2sysusers (GPtrArray  *group_ents,
   sysusers_table = *out_sysusers_table ?: g_hash_table_new_full (g_str_hash, g_str_equal,
                                                                  g_free, sysuser_ent_free);
 
-  for (int counter=0; counter < group_ents->len; counter++ )
+  for (int counter=0; counter < group_ents->len; counter++)
     {
       struct conv_group_ent *convent = group_ents->pdata[counter];
       struct sysuser_ent *sysent = g_hash_table_lookup (sysusers_table, convent->name);
 
       if (!sysent)
         sysent = g_new (struct sysuser_ent, 1);
+      else 
+        {
+          /* For now the simplest thing would be to check if uid:gid is set for "u" */
+          if (g_str_equal (sysent->type, "u"))
+            {
+              g_autofree char *current_gid = g_strdup_printf ("%u", convent->gid);
+              if (g_str_equal (sysent->id, current_gid))
+                {
+                  g_print("yes, let's also skip\n");
+                  continue;
+                }
+              char *colon = strchr (sysent->id, ':');
+              if (colon) 
+                {
+                  char *stored_gid = colon + 1;
+                  g_print ("current_gid is %s\n", current_gid);
+                  g_print ("stored_gid is %s\n", stored_gid);
+                  /* We skip the insertion if we found gid matches */
+                  if (g_str_equal (stored_gid, current_gid))
+                  {
+                    g_print("continued\n");
+                    continue;
+                  }
+                  else
+                  {
+                    *error = g_error_new (G_IO_ERROR, G_IO_ERROR_FAILED, "mismatch between /lib/passwd and /lib/group");
+                    g_print("Catastrophic failure\n");
+                  }
+                }
 
-      /* Let's not handle collision right now, and leave to a latter commit */
+            }
+          g_print("test\n");
+        }
       sysent->id = g_strdup_printf ("%u", convent->gid);
       sysent->type = g_strdup("g");
       sysent->name = g_strdup (convent->name);
       /* Unset the gecos & dir for g entries */
       sysent->gecos = g_strdup ("-");
       sysent->dir = g_strdup ("-");
-      char *name = g_strdup (sysent->name);
+      char *name = g_strdup (convent->name);
       g_hash_table_insert (sysusers_table, name, sysent);
     }
 
