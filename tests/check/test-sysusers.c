@@ -25,6 +25,7 @@ static const gchar *test_group[] = {
   "tcpdump:x:72:",
   "systemd-timesync:x:991:",
   "cockpit-ws:x:987:",
+  "test:x:111:",
   NULL
 };
 
@@ -33,6 +34,7 @@ static const gchar *expected_sysuser_group_content[] = {
   "g tcpdump 72 - -",
   "g systemd-timesync 991 - -",
   "g cockpit-ws 987 - -",
+  "g test 111 - -",
   NULL
 };
 
@@ -53,19 +55,35 @@ get_sysuser_content_variant (const char **content)
   return dict;
 }
 
-static void
-test_passwd_conversion(void)
+static void setup_passwd_sysusers (GHashTable **out_table,
+                                   GError     **error)
 {
-  gboolean ret;
-  g_autoptr(GHashTable) sysusers_table = NULL;
-  g_autoptr(GError) error = NULL;
-
   /* Check validity of the sysusers conversion */
   g_autofree char* test_content = g_strjoinv ("\n", (char **)test_passwd);
   g_autoptr(GPtrArray) passwd_ents = rpmostree_passwd_data2passwdents (test_content);
-  ret = rpmostree_passwdents2sysusers (passwd_ents, &sysusers_table, &error);
+  gboolean ret = rpmostree_passwdents2sysusers (passwd_ents, out_table, error);
   g_assert (ret);
-  g_assert_no_error (error);
+  g_assert_no_error (*error);
+}
+
+static void setup_group_sysusers (GHashTable **out_table,
+                                  GError     **error)
+{
+  /* Check if the conversion itself is valid */
+  g_autofree char *test_content = g_strjoinv ("\n", (char **)test_group);
+  g_autoptr(GPtrArray) group_ents = rpmostree_passwd_data2groupents (test_content);
+  gboolean ret = rpmostree_groupents2sysusers (group_ents, out_table, error);
+  g_assert (ret);
+  g_assert_no_error (*error);
+}
+
+static void
+test_passwd_conversion(void)
+{
+  g_autoptr(GHashTable) sysusers_table = NULL;
+  g_autoptr(GError) error = NULL;
+
+  setup_passwd_sysusers (&sysusers_table, &error);
 
   /* Check Hashtable properties */
   g_assert (sysusers_table);
@@ -80,7 +98,7 @@ test_passwd_conversion(void)
       g_variant_dict_lookup (&sysuser_dict, key, "^a&s", &sysent_list);
       g_assert (g_str_equal (sysuser_ent->type, (char **)sysent_list[0]));
       g_assert (g_str_equal (sysuser_ent->name, (char **)sysent_list[1]));
-      g_assert (g_str_equal (sysuser_ent->id, (char **)sysent_list[2]));\
+      g_assert (g_str_equal (sysuser_ent->id, (char **)sysent_list[2]));
     }
 
 }
@@ -88,22 +106,33 @@ test_passwd_conversion(void)
 static void
 test_group_conversion(void)
 {
-  gboolean ret;
   g_autoptr(GHashTable) sysusers_table = NULL;
   g_autoptr(GError) error = NULL;
 
-  /* Check if the conversion itself is valid */
-  g_autofree char *test_content = g_strjoinv ("\n", (char **)test_group);
-  g_autoptr(GPtrArray) group_ents = rpmostree_passwd_data2groupents (test_content);
-  ret = rpmostree_groupents2sysusers (group_ents, &sysusers_table, &error);
-  g_assert (ret);
-  g_assert_no_error (error);
+  setup_group_sysusers (&sysusers_table, &error);
 
   /* Check validity of hashtable */
   g_assert (sysusers_table);
-  g_assert_cmpuint (4, ==, g_hash_table_size (sysusers_table));
+  g_assert_cmpuint (5, ==, g_hash_table_size (sysusers_table));
 
 }
+
+static void
+test_sysuser_entry_collision(void)
+{
+  /* That will be the case when, we are trying to add a group entry
+   * with the same name as hashtable's sysentry, and the stored gid matches */
+  g_autoptr(GHashTable) sysusers_table = NULL;
+  g_autoptr(GError) error = NULL;
+ 
+  setup_passwd_sysusers (&sysusers_table, &error);
+  setup_group_sysusers (&sysusers_table, &error);
+
+  /* Check collision handle here */
+  g_print("Test freeing hashtable\n");
+  g_assert_cmpuint (5, ==, g_hash_table_size (sysusers_table));
+}
+
 
 int
 main (int argc,
@@ -113,6 +142,8 @@ main (int argc,
 
   g_test_add_func ("/sysusers/passwd_conversion", test_passwd_conversion);
   g_test_add_func ("/sysusers/group_conversion", test_group_conversion);
+  g_usleep (10000);
+  g_test_add_func ("/sysusers/collision_check", test_sysuser_entry_collision);
   return g_test_run ();
 }
 
