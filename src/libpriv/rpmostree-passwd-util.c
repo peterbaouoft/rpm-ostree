@@ -292,7 +292,7 @@ rpmostree_groupents2sysusers (GPtrArray  *group_ents,
 
       if (!sysent)
         sysent = g_new (struct sysuser_ent, 1);
-      else 
+      else
         {
           /* For now the simplest thing would be to check if uid:gid is set for "u" */
           if (g_str_equal (sysent->type, "u"))
@@ -300,11 +300,10 @@ rpmostree_groupents2sysusers (GPtrArray  *group_ents,
               g_autofree char *current_gid = g_strdup_printf ("%u", convent->gid);
               if (g_str_equal (sysent->id, current_gid))
                 {
-                  g_print("yes, let's also skip\n");
                   continue;
                 }
               char *colon = strchr (sysent->id, ':');
-              if (colon) 
+              if (colon)
                 {
                   char *stored_gid = colon + 1;
                   g_print ("current_gid is %s\n", current_gid);
@@ -312,7 +311,6 @@ rpmostree_groupents2sysusers (GPtrArray  *group_ents,
                   /* We skip the insertion if we found gid matches */
                   if (g_str_equal (stored_gid, current_gid))
                   {
-                    g_print("continued\n");
                     continue;
                   }
                   else
@@ -323,7 +321,6 @@ rpmostree_groupents2sysusers (GPtrArray  *group_ents,
                 }
 
             }
-          g_print("test\n");
         }
       sysent->id = g_strdup_printf ("%u", convent->gid);
       sysent->type = g_strdup("g");
@@ -339,6 +336,27 @@ rpmostree_groupents2sysusers (GPtrArray  *group_ents,
   if (*out_sysusers_table == NULL)
     *out_sysusers_table = g_steal_pointer (&sysusers_table);
 
+  return TRUE;
+}
+
+gboolean
+rpmostree_passwd_sysusers2char (GHashTable *sysusers_table,
+                                char      **out_content,
+                                GError    **error)
+{
+  /* Sinc ethe collision is handled during insertion, we just need to
+   * do the conversion directly */
+  GString* sysuser_content = g_string_new (NULL);
+  GLNX_HASH_TABLE_FOREACH_KV (sysusers_table, const char*,  key, struct sysuser_ent*, sysuser_ent)
+    {
+      g_autofree gchar* line_content = g_strjoin(" ", sysuser_ent->type,
+                                                 sysuser_ent->name, sysuser_ent->id,
+                                                 sysuser_ent->gecos, sysuser_ent->dir,
+                                                 NULL);
+      g_string_append_printf(sysuser_content, "%s\n", line_content);
+    }
+
+  *out_content = g_string_free(sysuser_content, FALSE);
   return TRUE;
 }
 
