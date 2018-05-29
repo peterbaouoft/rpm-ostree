@@ -384,6 +384,7 @@ rpmostree_check_passwd_groups (gboolean         passwd,
                                GFile           *treefile_dirpath,
                                JsonObject      *treedata,
                                const char      *previous_commit,
+                               GHashTable     **out_hashtable,
                                GCancellable    *cancellable,
                                GError         **error)
 {
@@ -411,7 +412,7 @@ rpmostree_check_passwd_groups (gboolean         passwd,
         return TRUE; /* Note early return */
       else if (g_str_equal (chk_type, "previous"))
         ; /* Handled below */
-      else if (g_str_equal (chk_type, "file"))
+      else if (g_str_equal (chk_type, "file") || g_str_equal (chk_type, "sysusers"))
         {
           direct = _rpmostree_jsonutil_object_require_string_member (chk,
                                                                      "filename",
@@ -516,7 +517,7 @@ rpmostree_check_passwd_groups (gboolean         passwd,
           return TRUE;
         }
     }
-  else if (g_str_equal (chk_type, "file"))
+  else if (g_str_equal (chk_type, "file") || g_str_equal (chk_type, "sysusers"))
     {
       old_path = g_file_resolve_relative_path (treefile_dirpath, direct);
       old_contents = glnx_file_get_contents_utf8_at (AT_FDCWD, gs_file_get_path_cached (old_path), NULL,
@@ -525,7 +526,7 @@ rpmostree_check_passwd_groups (gboolean         passwd,
         return FALSE;
     }
 
-  if (g_str_equal (chk_type, "previous") || g_str_equal (chk_type, "file"))
+  if (g_str_equal (chk_type, "previous") || g_str_equal (chk_type, "file") || g_str_equal (chk_type, "sysusers"))
     {
       if (passwd)
         old_ents = rpmostree_passwd_data2passwdents (old_contents);
@@ -723,11 +724,12 @@ rpmostree_check_passwd (OstreeRepo      *repo,
                         GFile           *treefile_dirpath,
                         JsonObject      *treedata,
                         const char      *previous_commit,
+                        GHashTable     **out_hashtable,
                         GCancellable    *cancellable,
                         GError         **error)
 {
   return rpmostree_check_passwd_groups (TRUE, repo, rootfs_fd, treefile_dirpath,
-                                        treedata, previous_commit,
+                                        treedata, previous_commit, out_hashtable,
                                         cancellable, error);
 }
 
@@ -740,11 +742,12 @@ rpmostree_check_groups (OstreeRepo      *repo,
                         GFile           *treefile_dirpath,
                         JsonObject      *treedata,
                         const char      *previous_commit,
+                        GHashTable     **out_hashtable,
                         GCancellable    *cancellable,
                         GError         **error)
 {
   return rpmostree_check_passwd_groups (TRUE, repo, rootfs_fd, treefile_dirpath,
-                                        treedata, previous_commit,
+                                        treedata, previous_commit, out_hashtable,
                                         cancellable, error);
 }
 
