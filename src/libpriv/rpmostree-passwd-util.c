@@ -229,6 +229,20 @@ compare_group_ents (gconstpointer a, gconstpointer b)
 }
 
 gboolean
+rpmostree_passwd_ents2sysusers (gboolean is_passwd,
+                                GPtrArray  *input_ents,
+                                GHashTable **out_sysusers_table,
+                                GError     **error)
+{
+  gboolean ret;
+  if (is_passwd)
+    ret = rpmostree_passwdents2sysusers (input_ents, out_sysusers_table, error);
+  else
+    ret = rpmostree_groupents2sysusers (input_ents, out_sysusers_table, error);
+  return ret;
+}
+
+gboolean
 rpmostree_passwdents2sysusers (GPtrArray  *passwd_ents,
                                GHashTable **out_sysusers_table,
                                GError     **error)
@@ -692,6 +706,11 @@ rpmostree_check_passwd_groups (gboolean         passwd,
         }
     }
 
+  /* Now, at the end of checking, if all goes correctly, we put entries into
+   * hashtable for sysusers */
+  if (g_str_equal (chk_type, "sysusers") &&
+      !rpmostree_passwd_ents2sysusers (passwd, new_ents, out_hashtable, error))
+    return FALSE;
   return TRUE;
 }
 

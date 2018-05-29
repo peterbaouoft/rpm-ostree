@@ -129,3 +129,9 @@ gboolean
 rpmostree_passwd_sysusers2char (GHashTable *sysusers_table,
                                 char      **out_content,
                                 GError    **error);
+
+gboolean
+rpmostree_passwd_ents2sysusers (gboolean is_passwd,
+                                GPtrArray  *input_ents,
+                                GHashTable **out_sysusers_table,
+                                GError     **error);
