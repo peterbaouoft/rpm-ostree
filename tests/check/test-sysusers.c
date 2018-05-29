@@ -15,7 +15,7 @@ static const gchar *test_passwd[] = {
 static const gchar *expected_sysuser_passwd_content[] ={
   "u chrony 994:992 - /var/lib/chrony",
   "u tcpdump 72 - /",
-  "u systemd-timesync 993:991 'systemd Time Synchronization' /",
+  "u systemd-timesync 993:991 \"systemd Time Synchronization\" /",
   "u cockpit-ws 988:987 'User for cockpit-ws' /",
   NULL
 };
@@ -133,7 +133,17 @@ test_sysuser_entry_collision(void)
   g_assert_cmpuint (5, ==, g_hash_table_size (sysusers_table));
 }
 
+static void
+test_sysusers_conversion(void)
+{
+  g_autoptr(GHashTable) sysusers_table = NULL;
+  g_autoptr(GError) error = NULL;
 
+  setup_passwd_sysusers (&sysusers_table, &error);
+  g_autofree gchar* converted_content = NULL;
+  rpmostree_passwd_sysusers2char (sysusers_table, &converted_content, &error);
+  g_print ("%s\n", converted_content);
+}
 int
 main (int argc,
       char *argv[])
@@ -142,8 +152,8 @@ main (int argc,
 
   g_test_add_func ("/sysusers/passwd_conversion", test_passwd_conversion);
   g_test_add_func ("/sysusers/group_conversion", test_group_conversion);
-  g_usleep (10000);
   g_test_add_func ("/sysusers/collision_check", test_sysuser_entry_collision);
+  g_test_add_func ("/sysusers/conversion_test", test_sysusers_conversion);
   return g_test_run ();
 }
 
