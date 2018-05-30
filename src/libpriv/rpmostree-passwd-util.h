@@ -97,6 +97,7 @@ struct sysuser_ent {
   char *id;         /* id in sysuser entry, can be in the form of 1: uid 2:gid 3: uid:gid, or we can separate this into uid_t and gid_t*/
   char *gecos;      /* user information */
   char *dir;        /* home directory */
+  char *shell;      /* Login shell, defaulted to /sbin/nologin */
 };
 
 struct conv_passwd_ent {
@@ -105,6 +106,7 @@ struct conv_passwd_ent {
   gid_t gid;
   char *pw_gecos;   /* user information */
   char *pw_dir;     /* home directory */
+  char *pw_shell;   /* login shell */
 };
 
 struct conv_group_ent {

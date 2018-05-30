@@ -138,6 +138,7 @@ conv_passwd_ent_free (void *vptr)
   g_free (ptr->name);
   g_free (ptr->pw_gecos);
   g_free (ptr->pw_dir);
+  g_free (ptr->pw_shell);
   g_free (ptr);
 }
 
@@ -159,8 +160,9 @@ rpmostree_passwd_data2passwdents (const char *data)
       convent->uid  = ent->pw_uid;
       convent->gid  = ent->pw_gid;
       /* Want to add anymore, like dir? */
-      convent->pw_gecos = g_strdup(ent->pw_gecos);
-      convent->pw_dir = g_strdup(ent->pw_dir);
+      convent->pw_gecos = g_strdup (ent->pw_gecos);
+      convent->pw_dir = g_strdup (ent->pw_dir);
+      convent->pw_shell = g_strdup (ent->pw_shell);
       g_ptr_array_add (ret, convent);
     }
 
@@ -270,10 +272,15 @@ rpmostree_passwdents2sysusers (GPtrArray  *passwd_ents,
       sysent->type = g_strdup ("u");
       sysent->name =  g_strdup (convent->name);
 
-      // Apparently those two fields were not used other places,
-      // let's steal the poitner
-      sysent->gecos = g_steal_pointer (&convent->pw_gecos);
-      sysent->dir = g_steal_pointer (&convent->pw_dir);
+      /* There are two logic here.. 1: we want to set the gecos/dir to
+       * NULL to represent default for sysusers entries 2: otherwise,
+       * since the content for gecos/dir is not used elsewhere, we steal
+       * the pointer from old entries */
+      sysent->gecos = (g_str_equal (convent->pw_gecos, "")) ? NULL :
+                      g_steal_pointer (&convent->pw_gecos);
+      sysent->dir = (g_str_equal (convent->pw_dir, ""))? NULL :
+                    g_steal_pointer (&convent->pw_dir);
+      sysent->shell = g_steal_pointer (&convent->pw_shell);
 
       // Not sure if we need the sysent name for now...
       // so, suggestions are welcome =)
@@ -313,35 +320,28 @@ rpmostree_groupents2sysusers (GPtrArray  *group_ents,
             {
               g_autofree char *current_gid = g_strdup_printf ("%u", convent->gid);
               if (g_str_equal (sysent->id, current_gid))
-                {
                   continue;
-                }
               char *colon = strchr (sysent->id, ':');
               if (colon)
                 {
                   char *stored_gid = colon + 1;
-                  g_print ("current_gid is %s\n", current_gid);
-                  g_print ("stored_gid is %s\n", stored_gid);
                   /* We skip the insertion if we found gid matches */
                   if (g_str_equal (stored_gid, current_gid))
-                  {
                     continue;
-                  }
                   else
-                  {
-                    *error = g_error_new (G_IO_ERROR, G_IO_ERROR_FAILED, "mismatch between /lib/passwd and /lib/group");
-                    g_print("Catastrophic failure\n");
-                  }
+                    return glnx_throw (error, "mismatch between passwd/group: %s %s",
+                                       stored_gid, current_gid);
                 }
-
             }
         }
       sysent->id = g_strdup_printf ("%u", convent->gid);
       sysent->type = g_strdup("g");
       sysent->name = g_strdup (convent->name);
       /* Unset the gecos & dir for g entries */
-      sysent->gecos = g_strdup ("-");
-      sysent->dir = g_strdup ("-");
+      sysent->gecos = NULL;
+      sysent->dir = NULL;
+      sysent->shell = NULL;
+
       char *name = g_strdup (convent->name);
       g_hash_table_insert (sysusers_table, name, sysent);
     }
@@ -363,10 +363,12 @@ rpmostree_passwd_sysusers2char (GHashTable *sysusers_table,
   GString* sysuser_content = g_string_new (NULL);
   GLNX_HASH_TABLE_FOREACH_KV (sysusers_table, const char*,  key, struct sysuser_ent*, sysuser_ent)
     {
+      const char* gecos = sysuser_ent->gecos ?: "-";
+      const char* dir = sysuser_ent->dir ?: "-";
+      const char* shell = sysuser_ent->shell ?: "-";
       g_autofree gchar* line_content = g_strjoin(" ", sysuser_ent->type,
                                                  sysuser_ent->name, sysuser_ent->id,
-                                                 sysuser_ent->gecos, sysuser_ent->dir,
-                                                 NULL);
+                                                 gecos, dir, shell, NULL);
       g_string_append_printf(sysuser_content, "%s\n", line_content);
     }
 
