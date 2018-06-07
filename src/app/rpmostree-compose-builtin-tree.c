@@ -1259,15 +1259,27 @@ impl_commit_tree (RpmOstreeTreeComposeContext *self,
   if (self->treefile)
     {
       g_autoptr(GFile) treefile_dirpath = g_file_get_parent (self->treefile_path);
+      g_autoptr(GHashTable) sysusers_table = NULL;
       if (!rpmostree_check_passwd (self->repo, self->rootfs_dfd, treefile_dirpath, self->treefile,
-                                   self->previous_checksum,
+                                   self->previous_checksum, &sysusers_table,
                                    cancellable, error))
         return glnx_prefix_error (error, "Handling passwd db");
 
       if (!rpmostree_check_groups (self->repo, self->rootfs_dfd, treefile_dirpath, self->treefile,
-                                   self->previous_checksum,
+                                   self->previous_checksum, &sysusers_table,
                                    cancellable, error))
         return glnx_prefix_error (error, "Handling group db");
+      if (sysusers_table)
+        {
+          /* Do conversion and write files here */
+          g_autofree gchar* sysuser_content = NULL;
+          if (!rpmostree_passwd_sysusers2char (sysusers_table,
+                                               &sysuser_content, error))
+            return glnx_prefix_error (error, "Handling sysusers conversion");
+          /* Write to the sysusers directory */
+          ;
+          /* May be delete the /usr/lib/passwd generated? */
+        }
     }
 
   /* See comment above */
