@@ -89,6 +89,9 @@ static RpmOstreeCommand commands[] = {
   { "refresh-md", 0,
     "Generate rpm repo metadata",
     rpmostree_builtin_refresh_md },
+  //{ "temp-convert", RPM_OSTREE_BUILTIN_FLAG_LOCAL_CMD,
+    //"temp command to convert passwd/group conversion",
+   //  rpmostree_builtin_temp_convert },
   /* Legacy aliases */
   { "pkg-add", RPM_OSTREE_BUILTIN_FLAG_HIDDEN,
     NULL, rpmostree_builtin_install },

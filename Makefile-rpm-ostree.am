@@ -57,7 +57,7 @@ rpm_ostree_SOURCES = src/app/main.c \
 	src/app/rpmostree-polkit-agent.c \
 	src/app/rpmostree-polkit-agent.h \
 	src/app/rpmostree-builtin-kargs.c \
-	$(NULL)
+        $(NULL)
 
 if BUILDOPT_COMPOSE_TOOLING
 rpm_ostree_SOURCES += \
