@@ -30,6 +30,7 @@ rpmostree_check_passwd (OstreeRepo      *repo,
                         GFile           *treefile_path,
                         JsonObject      *treedata,
                         const char      *previous_commit,
+                        GHashTable     **out_hashtable,
                         GCancellable    *cancellable,
                         GError         **error);
 
@@ -39,6 +40,7 @@ rpmostree_check_groups (OstreeRepo      *repo,
                         GFile           *treefile_path,
                         JsonObject      *treedata,
                         const char      *previous_commit,
+                        GHashTable     **out_hashtable,
                         GCancellable    *cancellable,
                         GError         **error);
 
@@ -89,12 +91,22 @@ gboolean
 rpmostree_passwd_complete_rpm_layering (int       rootfs_dfd,
                                         GError  **error);
 
+struct sysuser_ent {
+  const char *type;       /* type of sysuser entry, can be 1: u (user) 2: g (group) 3: m (mixed) 4: r (ranged ids) */
+  char *name;
+  char *id;         /* id in sysuser entry, can be in the form of 1: uid 2:gid 3: uid:gid, or we can separate this into uid_t and gid_t*/
+  char *gecos;      /* user information */
+  char *dir;        /* home directory */
+  char *shell;      /* Login shell, defaulted to /sbin/nologin */
+};
+
 struct conv_passwd_ent {
   char *name;
   uid_t uid;
   gid_t gid;
   char *pw_gecos;   /* user information */
   char *pw_dir;     /* home directory */
+  char *pw_shell;   /* login shell */
 };
 
 struct conv_group_ent {
@@ -107,3 +119,23 @@ rpmostree_passwd_data2passwdents (const char *data);
 
 GPtrArray *
 rpmostree_passwd_data2groupents (const char *data);
+
+gboolean
+rpmostree_passwdents2sysusers (GPtrArray *passwd_ents,
+                               GPtrArray **out_sysusers_entries,
+                               GError **error);
+gboolean
+rpmostree_groupents2sysusers (GPtrArray  *group_ents,
+                              GPtrArray **out_sysusers_entries,
+                              GError    **error);
+
+gboolean
+rpmostree_passwd_sysusers2char (GPtrArray *sysusers_entries,
+                                char      **out_content,
+                                GError    **error);
+
+gboolean
+rpmostree_passwd_ents2sysusers (gboolean is_passwd,
+                                GPtrArray  *input_ents,
+                                GHashTable **out_sysusers_table,
+                                GError     **error);

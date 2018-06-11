@@ -138,6 +138,7 @@ conv_passwd_ent_free (void *vptr)
   g_free (ptr->name);
   g_free (ptr->pw_gecos);
   g_free (ptr->pw_dir);
+  g_free (ptr->pw_shell);
   g_free (ptr);
 }
 
@@ -159,8 +160,9 @@ rpmostree_passwd_data2passwdents (const char *data)
       convent->uid  = ent->pw_uid;
       convent->gid  = ent->pw_gid;
       /* Want to add anymore, like dir? */
-      convent->pw_gecos = g_strdup(ent->pw_gecos);
-      convent->pw_dir = g_strdup(ent->pw_dir);
+      convent->pw_gecos = g_strdup (ent->pw_gecos);
+      convent->pw_dir = g_strdup (ent->pw_dir);
+      convent->pw_shell = g_strdup (ent->pw_shell);
       g_ptr_array_add (ret, convent);
     }
 
@@ -183,6 +185,17 @@ conv_group_ent_free (void *vptr)
 
   g_free (ptr->name);
   g_free (ptr);
+}
+
+static void
+sysuser_ent_free (void *vptr)
+{
+  struct sysuser_ent *ptr = vptr;
+  g_free (ptr->name);
+  g_free (ptr->id);
+  g_free (ptr->gecos);
+  g_free (ptr->dir);
+  g_free (ptr->shell);
 }
 
 GPtrArray *
@@ -216,6 +229,112 @@ compare_group_ents (gconstpointer a, gconstpointer b)
   return strcmp ((*sa)->name, (*sb)->name);
 }
 
+rpmostree_passwd_ents2sysusers (gboolean is_passwd,
+                                GPtrArray  *input_ents,
+                                GHashTable **out_sysusers_table,
+                                GError     **error)
+{
+  gboolean ret;
+  if (is_passwd)
+    ret = FALSE;
+    //ret = rpmostree_passwdents2sysusers (input_ents, out_sysusers_table, error);
+  else
+    ret = FALSE;
+  return ret;
+}
+
+gboolean
+rpmostree_passwdents2sysusers (GPtrArray  *passwd_ents,
+                               GPtrArray  **out_sysusers_entries,
+                               GError     **error)
+{
+  /* Do the assignment inside the function so we don't need to handle visibility
+   * issues from different files any more */
+  GPtrArray *sysusers_array = NULL;
+  sysusers_array = *out_sysusers_entries ?: g_ptr_array_new_with_free_func (sysuser_ent_free);
+  for (int counter=0; counter < passwd_ents->len; counter++)
+    {
+      struct conv_passwd_ent *convent = passwd_ents->pdata[counter];
+      struct sysuser_ent *sysent = g_new (struct sysuser_ent, 1);
+
+      // Note, sysuser support uid:gid format when uid is not equal
+      // to gid, and that allows sysusers to add both group and user entries
+      if (convent->uid != convent->gid)
+        sysent->id = g_strdup_printf ("%u:%u", convent->uid, convent->gid);
+      else
+        sysent->id = g_strdup_printf ("%u", convent->uid);
+
+      sysent->type = "u";
+      sysent->name = g_strdup (convent->name);
+
+      sysent->gecos = (g_str_equal (convent->pw_gecos, "")) ? NULL :
+                       g_strdup_printf ("\"%s\"", convent->pw_gecos);
+      sysent->dir = (g_str_equal (convent->pw_dir, ""))? NULL :
+                    g_steal_pointer (&convent->pw_dir);
+      sysent->shell = g_steal_pointer (&convent->pw_shell);
+
+      g_ptr_array_add (sysusers_array, sysent);
+    }
+  /* Do the assignment at the end if the sysusers_table was not initialized */
+  if (*out_sysusers_entries == NULL)
+    *out_sysusers_entries = g_steal_pointer (&sysusers_array);
+
+  return TRUE;
+}
+
+gboolean
+rpmostree_groupents2sysusers (GPtrArray  *group_ents,
+                              GPtrArray **out_sysusers_entries,
+                              GError     **error)
+{
+  /* Do the assignment inside the function so we don't need to handle visibility
+   * issues from different files any more */
+  GPtrArray *sysusers_array = NULL;
+  sysusers_array  = *out_sysusers_entries ?: g_ptr_array_new_with_free_func (sysuser_ent_free);
+  for (int counter=0; counter < group_ents->len; counter++)
+    {
+      struct conv_group_ent *convent = group_ents->pdata[counter];
+      struct sysuser_ent *sysent = g_new (struct sysuser_ent, 1);
+
+      sysent->type = "g";
+      sysent->name = g_steal_pointer (&convent->name);
+      sysent->id = g_strdup_printf ("%u", convent->gid);
+      sysent->gecos = NULL;
+      sysent->dir = NULL;
+      sysent->shell = NULL;
+      
+      g_ptr_array_add (sysusers_array, sysent);
+    }
+  /* Do the assignment at the end if the sysusers_table was not initialized */
+  if (*out_sysusers_entries == NULL)
+    *out_sysusers_entries = g_steal_pointer (&sysusers_array);
+
+  return TRUE;
+}
+
+gboolean
+rpmostree_passwd_sysusers2char (GPtrArray *sysusers_entries,
+                                char      **out_content,
+                                GError    **error)
+{
+ 
+  GString* sysuser_content = g_string_new (NULL);
+  for (int counter = 0; counter < sysusers_entries->len; counter++)
+    {
+      struct sysuser_ent *sysent = sysusers_entries->pdata[counter];
+      const char *shell = sysent->shell ?: "-";
+      const char *gecos = sysent->gecos ?: "-";
+      const char *dir = sysent->dir ?: "-";
+      g_autofree gchar* line_content = g_strjoin (" ", sysent->type, sysent->name,
+                                                  sysent->id, gecos, dir, shell, NULL);
+      g_string_append_printf (sysuser_content, "%s\n", line_content);
+    }
+  if (out_content)
+    *out_content = g_string_free(sysuser_content, FALSE);
+  
+  return TRUE;
+}
+
 /* See "man 5 passwd" We just make sure the name and uid/gid match,
    and that none are missing. don't care about GECOS/dir/shell.
 */
@@ -226,6 +345,7 @@ rpmostree_check_passwd_groups (gboolean         passwd,
                                GFile           *treefile_dirpath,
                                JsonObject      *treedata,
                                const char      *previous_commit,
+                               GHashTable     **out_hashtable,
                                GCancellable    *cancellable,
                                GError         **error)
 {
@@ -253,7 +373,7 @@ rpmostree_check_passwd_groups (gboolean         passwd,
         return TRUE; /* Note early return */
       else if (g_str_equal (chk_type, "previous"))
         ; /* Handled below */
-      else if (g_str_equal (chk_type, "file"))
+      else if (g_str_equal (chk_type, "file") || g_str_equal (chk_type, "sysusers"))
         {
           direct = _rpmostree_jsonutil_object_require_string_member (chk,
                                                                      "filename",
@@ -358,7 +478,7 @@ rpmostree_check_passwd_groups (gboolean         passwd,
           return TRUE;
         }
     }
-  else if (g_str_equal (chk_type, "file"))
+  else if (g_str_equal (chk_type, "file") || g_str_equal (chk_type, "sysusers"))
     {
       old_path = g_file_resolve_relative_path (treefile_dirpath, direct);
       old_contents = glnx_file_get_contents_utf8_at (AT_FDCWD, gs_file_get_path_cached (old_path), NULL,
@@ -367,7 +487,7 @@ rpmostree_check_passwd_groups (gboolean         passwd,
         return FALSE;
     }
 
-  if (g_str_equal (chk_type, "previous") || g_str_equal (chk_type, "file"))
+  if (g_str_equal (chk_type, "previous") || g_str_equal (chk_type, "file") || g_str_equal (chk_type, "sysusers"))
     {
       if (passwd)
         old_ents = rpmostree_passwd_data2passwdents (old_contents);
@@ -548,6 +668,11 @@ rpmostree_check_passwd_groups (gboolean         passwd,
         }
     }
 
+  /* Now, at the end of checking, if all goes correctly, we put entries into
+   * hashtable for sysusers */
+  if (g_str_equal (chk_type, "sysusers") &&
+      !rpmostree_passwd_ents2sysusers (passwd, new_ents, out_hashtable, error))
+    return FALSE;
   return TRUE;
 }
 
@@ -560,11 +685,12 @@ rpmostree_check_passwd (OstreeRepo      *repo,
                         GFile           *treefile_dirpath,
                         JsonObject      *treedata,
                         const char      *previous_commit,
+                        GHashTable     **out_hashtable,
                         GCancellable    *cancellable,
                         GError         **error)
 {
   return rpmostree_check_passwd_groups (TRUE, repo, rootfs_fd, treefile_dirpath,
-                                        treedata, previous_commit,
+                                        treedata, previous_commit, out_hashtable,
                                         cancellable, error);
 }
 
@@ -577,11 +703,12 @@ rpmostree_check_groups (OstreeRepo      *repo,
                         GFile           *treefile_dirpath,
                         JsonObject      *treedata,
                         const char      *previous_commit,
+                        GHashTable     **out_hashtable,
                         GCancellable    *cancellable,
                         GError         **error)
 {
   return rpmostree_check_passwd_groups (TRUE, repo, rootfs_fd, treefile_dirpath,
-                                        treedata, previous_commit,
+                                        treedata, previous_commit, out_hashtable,
                                         cancellable, error);
 }
 

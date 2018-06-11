@@ -50,6 +50,7 @@ BUILTINPROTO(uninstall);
 BUILTINPROTO(override);
 BUILTINPROTO(start_daemon);
 BUILTINPROTO(ex);
+// BUILTINPROTO(temp_convert);
 
 #undef BUILTINPROTO
 
